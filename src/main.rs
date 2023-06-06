@@ -12,10 +12,42 @@ use std::path::Path;
 
 mod crypto;
 
+fn retrieve(name: &str, signature: &str) -> io::Result<()> {
+    let fp = format!("pman/{}/{}", &name, &name);
+    let msg = format!("Signature: ").white().bold();
+    print!("{}", msg);
+    match io::stdout().flush() {
+        Ok(()) => (),
+        Err(e) => print!("{}\n", e),
+    };
+
+    let input = read_password().unwrap();
+    if crypto::hash(&input) == signature {
+        let mut file = File::open(&fp)?;
+        let mut buffer = String::new();
+        file.read_to_string(&mut buffer)?;
+        let decrypted_password = crypto::decrypt(&signature, &buffer);
+        print!("{}\n", decrypted_password);
+    } else {
+        let msg = format!("unmatched").yellow().bold();
+        print!("\npman: {}\n", msg);
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
 fn insert(name: &str, signature: &str) -> io::Result<()> {
-    let fp = format!("pm/{}", &name);
+    if name == "signature" {
+        let msg = format!("Cannot be `signature`").yellow().bold();
+        print!("pman: {}\n", msg);
+        std::process::exit(1);
+    }
+
+    let fp = format!("pman/{}", &name);
     if Path::new(&fp).is_dir() {
-        print!("Aborted: Already inserted!\n");
+        let msg = format!("Already inserted.").yellow().bold();
+        print!("pman: {}\n", msg);
         std::process::exit(1);
     }
 
@@ -24,19 +56,51 @@ fn insert(name: &str, signature: &str) -> io::Result<()> {
         Err(e) => print!("{}\n", e),
     };
 
-    print!("Password: ");
+    print!("\nPassword: ");
     match io::stdout().flush() {
         Ok(()) => (),
         Err(e) => print!("{}\n", e),
     };
 
-    let file_name = format!("pm/{}/{}", &name, &name);
+    let file_name = format!("pman/{}/{}", &name, &name);
     let password = read_password().unwrap();
     let mut file = File::create(&file_name)?;
     file.write_all(crypto::encrypt(&signature, &password).as_bytes())?;
 
     let msg = format!("Saved!").green().bold();
-    println!("{}", msg);
+    println!("pman: {}", msg);
+
+    Ok(())
+}
+
+fn delete(name: &str) -> io::Result<()> {
+    if name == "signature" {
+        let msg = format!("Cannot be `signature`").yellow().bold();
+        print!("pman: {}\n", msg);
+        std::process::exit(1);
+    }
+
+    let fp = format!("pman/{}", name);
+    fs::remove_dir_all(&fp)?;
+    let msg = format!("Deleted").red().bold();
+    print!("pman: {}\n", msg);
+
+    Ok(())
+}
+
+fn list() -> io::Result<()> {
+    let fp = format!("pman");
+    let entries = fs::read_dir(&fp)?;
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        let dir_name = path.file_name().unwrap().to_str().unwrap();
+
+        if dir_name != "signature" {
+            let dir_name = format!("{}", dir_name).white().bold();
+            print!("-> {}\n", dir_name);
+        }
+    }
 
     Ok(())
 }
@@ -48,28 +112,22 @@ fn pr_usage() {
 fn main() -> io::Result<()> {
     let argv: Vec<String> = env::args().collect();
 
-    if argv.len() != 3 {
+    if argv.len() < 2 {
         pr_usage();
         std::process::exit(1);
     }
 
-    if !Path::new("pm").is_dir() {
-        match fs::create_dir("pm") {
-            Ok(()) => (),
-            Err(e) => print!("{}\n", e),
-        };
+    if !Path::new("pman").is_dir() {
+        fs::create_dir("pman")?;
     }
 
-    if !Path::new("pm/signature").is_dir() {
-        match fs::create_dir("pm/signature") {
-            Ok(()) => (),
-            Err(e) => print!("{}\n", e),
-        };
+    if !Path::new("pman/signature").is_dir() {
+        fs::create_dir("pman/signature")?;
     }
 
-    if Path::new("pm/signature").read_dir()?.next().is_none() {
+    if Path::new("pman/signature").read_dir()?.next().is_none() {
         // get signature
-        let msg = "Register Signature: ".white().bold();
+        let msg = "\nRegister Signature: ".white().bold();
         print!("{}", msg);
         match io::stdout().flush() {
             Ok(()) => (),
@@ -79,7 +137,7 @@ fn main() -> io::Result<()> {
         let signature = read_password().unwrap();
 
         // confirm signature
-        let msg = "Confirm Signature: ".white().bold();
+        let msg = "Confirm: ".white().bold();
         print!("{}", msg);
         match io::stdout().flush() {
             Ok(()) => (),
@@ -89,12 +147,16 @@ fn main() -> io::Result<()> {
         let confirm_signature = read_password().unwrap();
 
         if signature == confirm_signature {
-            let mut file = fs::File::create("pm/signature/signature")?;
+            let mut file = fs::File::create("pman/signature/signature")?;
             file.write_all(crypto::hash(&signature.as_str()).as_bytes())?;
+        } else {
+            let msg = format!("pman: ").yellow().bold();
+            print!("{}unmatched.\n", msg);
+            std::process::exit(1);
         }
     }
 
-    let mut file = File::open("pm/signature/signature")?;
+    let mut file = File::open("pman/signature/signature")?;
     let mut signature = String::new();
     file.read_to_string(&mut signature)?;
 
@@ -103,6 +165,23 @@ fn main() -> io::Result<()> {
             Ok(()) => (),
             Err(e) => print!("{}\n", e),
         },
+        "-d" => match delete(&argv[2]) {
+            Ok(()) => (),
+            Err(e) => print!("{}\n", e),
+        },
+        "-l" => {
+            if argv.len() == 2 {
+                match list() {
+                    Ok(()) => (),
+                    Err(e) => print!("{}\n", e),
+                };
+            } else {
+                match retrieve(&argv[2], &signature) {
+                    Ok(()) => (),
+                    Err(e) => print!("{}\n", e),
+                };
+            }
+        }
         _ => pr_usage(),
     };
 
