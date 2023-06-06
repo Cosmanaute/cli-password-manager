@@ -27,7 +27,9 @@ fn retrieve(name: &str, signature: &str) -> io::Result<()> {
         let mut buffer = String::new();
         file.read_to_string(&mut buffer)?;
         let decrypted_password = crypto::decrypt(&signature, &buffer);
-        print!("{}\n", decrypted_password);
+
+        let msg = format!("{}", decrypted_password).black().bold();
+        print!("Password: {}\n", msg);
     } else {
         let msg = format!("unmatched").yellow().bold();
         print!("\npman: {}\n", msg);
@@ -106,7 +108,7 @@ fn list() -> io::Result<()> {
 }
 
 fn pr_usage() {
-    print!("Usage: <flag> <user>\n");
+    print!("Usage: [action] [user]\n");
 }
 
 fn main() -> io::Result<()> {
@@ -163,22 +165,22 @@ fn main() -> io::Result<()> {
     match argv[1].as_str() {
         "-i" => match insert(&argv[2], &signature) {
             Ok(()) => (),
-            Err(e) => print!("{}\n", e),
+            Err(_) => pr_usage(),
         },
         "-d" => match delete(&argv[2]) {
             Ok(()) => (),
-            Err(e) => print!("{}\n", e),
+            Err(_) => pr_usage(),
         },
         "-l" => {
             if argv.len() == 2 {
                 match list() {
                     Ok(()) => (),
-                    Err(e) => print!("{}\n", e),
+                    Err(_) => pr_usage(),
                 };
             } else {
                 match retrieve(&argv[2], &signature) {
                     Ok(()) => (),
-                    Err(e) => print!("{}\n", e),
+                    Err(_) => pr_usage(),
                 };
             }
         }
