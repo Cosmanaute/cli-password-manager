@@ -10,10 +10,16 @@ use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 
+const DIR: &str = "/home/cos/pman";
 mod crypto;
 
 fn retrieve(name: &str, signature: &str) -> io::Result<()> {
-    let fp = format!("pman/{}/{}", &name, &name);
+    let fp = format!("{}/{}/{}", DIR, &name, &name);
+    if !Path::new(&fp).exists() {
+        print!("pman: {}\n", format!("Not found").yellow().bold());
+        std::process::exit(1);
+    }
+
     let msg = format!("Signature: ").white().bold();
     print!("{}", msg);
     match io::stdout().flush() {
@@ -46,7 +52,7 @@ fn insert(name: &str, signature: &str) -> io::Result<()> {
         std::process::exit(1);
     }
 
-    let fp = format!("pman/{}", &name);
+    let fp = format!("{}/{}", DIR, &name);
     if Path::new(&fp).is_dir() {
         let msg = format!("Already inserted.").yellow().bold();
         print!("pman: {}\n", msg);
@@ -64,7 +70,7 @@ fn insert(name: &str, signature: &str) -> io::Result<()> {
         Err(e) => print!("{}\n", e),
     };
 
-    let file_name = format!("pman/{}/{}", &name, &name);
+    let file_name = format!("{}/{}/{}", DIR, &name, &name);
     let password = read_password().unwrap();
     let mut file = File::create(&file_name)?;
     file.write_all(crypto::encrypt(&signature, &password).as_bytes())?;
@@ -82,7 +88,7 @@ fn delete(name: &str) -> io::Result<()> {
         std::process::exit(1);
     }
 
-    let fp = format!("pman/{}", name);
+    let fp = format!("{}/{}", DIR, name);
     fs::remove_dir_all(&fp)?;
     let msg = format!("Deleted").red().bold();
     print!("pman: {}\n", msg);
@@ -91,8 +97,7 @@ fn delete(name: &str) -> io::Result<()> {
 }
 
 fn list() -> io::Result<()> {
-    let fp = format!("pman");
-    let entries = fs::read_dir(&fp)?;
+    let entries = fs::read_dir(&DIR)?;
     for entry in entries {
         let entry = entry?;
         let path = entry.path();
@@ -119,15 +124,19 @@ fn main() -> io::Result<()> {
         std::process::exit(1);
     }
 
-    if !Path::new("pman").is_dir() {
-        fs::create_dir("pman")?;
+    if !Path::new(&DIR).is_dir() {
+        fs::create_dir(&DIR)?;
     }
 
-    if !Path::new("pman/signature").is_dir() {
-        fs::create_dir("pman/signature")?;
+    if !Path::new(&format!("{}/signature", DIR)).is_dir() {
+        fs::create_dir(&format!("{}/signature", DIR))?;
     }
 
-    if Path::new("pman/signature").read_dir()?.next().is_none() {
+    if Path::new(&format!("{}/signature", DIR))
+        .read_dir()?
+        .next()
+        .is_none()
+    {
         // get signature
         let msg = "\nRegister Signature: ".white().bold();
         print!("{}", msg);
@@ -149,7 +158,7 @@ fn main() -> io::Result<()> {
         let confirm_signature = read_password().unwrap();
 
         if signature == confirm_signature {
-            let mut file = fs::File::create("pman/signature/signature")?;
+            let mut file = fs::File::create(&format!("{}/signature/signature", DIR))?;
             file.write_all(crypto::hash(&signature.as_str()).as_bytes())?;
         } else {
             let msg = format!("pman: ").yellow().bold();
@@ -158,7 +167,7 @@ fn main() -> io::Result<()> {
         }
     }
 
-    let mut file = File::open("pman/signature/signature")?;
+    let mut file = File::open(&format!("{}/signature/signature", DIR))?;
     let mut signature = String::new();
     file.read_to_string(&mut signature)?;
 
