@@ -10,7 +10,7 @@ use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 
-const DIR: &str = "/home/cos/pman";
+const DIR: &str = "/home/cos/.pman";
 mod crypto;
 
 fn retrieve(name: &str, signature: &str) -> io::Result<()> {
